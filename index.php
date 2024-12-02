@@ -1,33 +1,32 @@
 <?php
 session_start();
+require_once 'db.php'; // Подключаем файл с настройками подключения к базе данных
 
-// Укажите папку для сгенерированных тестов
-$generatedDir = __DIR__ . '/generated_tests';
+// Проверяем, была ли отправлена форма
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Получаем данные из формы
+    $fullName = $_POST['full_name'];
+    $email = $_POST['email'];
+    $password = $_POST['password'];
 
-// Получаем список сгенерированных PHP-файлов
-$testFiles = is_dir($generatedDir) ? array_diff(scandir($generatedDir), ['.', '..']) : [];
+    // Проверяем, что email уникален
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+    $stmt->execute([$email]);
+    $user = $stmt->fetch();
 
-// Проверка на выборку количества вопросов для теста
-if (isset($_POST['num_questions'])) {
-    $numQuestions = (int)$_POST['num_questions'];
-    $testName = $_POST['test_name'];
-    $testFilePath = $generatedDir . '/' . $testName . '.php';
-
-    // Проверяем, существует ли файл с тестом
-    if (!file_exists($testFilePath)) {
-        die('Тест не найден.');
+    if ($user) {
+        die('Пользователь с таким email уже существует.');
     }
 
-    // Загружаем тест
-    $questions = include $testFilePath;
+    // Хешируем пароль
+    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-    // Перемешиваем вопросы и ограничиваем их количеством
-    shuffle($questions); // Рандомизируем вопросы
-    $selectedQuestions = array_slice($questions, 0, $numQuestions); // Выбираем случайные вопросы
+    // Подготавливаем SQL-запрос на добавление пользователя
+    $stmt = $pdo->prepare("INSERT INTO users (full_name, email, pass, role) VALUES (?, ?, ?, 'teacher')");
+    $stmt->execute([$fullName, $email, $hashedPassword]);
 
-    // Сохраняем вопросы для сессии, ключ для каждого теста уникален
-    $_SESSION['selected_questions'][$testName] = $selectedQuestions;
-    $_SESSION['test_name'] = $testName; // Сохраняем имя теста
+    // Уведомление о том, что регистрация прошла успешно
+    echo 'Регистрация прошла успешно. Вы можете войти в систему.';
 }
 ?>
 
@@ -36,77 +35,64 @@ if (isset($_POST['num_questions'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Тесты</title>
-    <script>
-        // AJAX обработчик для генерации теста
-        function generateTest(event, testName) {
-            event.preventDefault(); // Отменяем обычное поведение формы
-
-            var numQuestions = document.getElementById('num_questions_' + testName).value;
-
-            // Формируем данные для отправки
-            var formData = new FormData();
-            formData.append('test_name', testName);
-            formData.append('num_questions', numQuestions);
-
-            // Отправляем AJAX запрос
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', 'index.php', true);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState == 4 && xhr.status == 200) {
-                    // Обновляем ссылку на пройти тест
-                    var response = JSON.parse(xhr.responseText);
-                    if (response.success) {
-                        document.getElementById('test_link_' + testName).innerHTML = '<a href="take_test.php?test=' + encodeURIComponent(testName) + '">Пройти тест</a>';
-                    }
-                }
-            };
-            xhr.send(formData);
-        }
-    </script>
+    <title>QuizMaster</title>
 </head>
-<body>
-    <h1>Список тестов</h1>
-    <a href="import.php">Импортировать тест</a> <!-- Ссылка на импорт -->
-    <table border="1" cellpadding="10" style="margin-top: 10px;">
-        <thead>
-            <tr>
-                <th>Название теста</th>
-                <th>Выбрать количество вопросов</th>
-                <th>Пройти тест</th>
-                <th>Редактировать</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php if (empty($testFiles)): ?>
-                <tr>
-                    <td colspan="4">Нет доступных тестов. Импортируйте их через <a href="import.php">Импорт</a>.</td>
-                </tr>
-            <?php else: ?>
-                <?php foreach ($testFiles as $testFile): ?>
-                    <?php $testName = pathinfo($testFile, PATHINFO_FILENAME); ?>
-                    <tr>
-                        <td><?= htmlspecialchars($testName) ?></td>
-                        <td>
-                            <form onsubmit="generateTest(event, '<?= htmlspecialchars($testName) ?>')">
-                                <input type="hidden" name="test_name" value="<?= htmlspecialchars($testName) ?>">
-                                <label for="num_questions_<?= $testName ?>">Выберите количество вопросов:</label>
-                                <input type="number" name="num_questions" id="num_questions_<?= $testName ?>" min="1" max="100" required>
-                                <button type="submit">Сгенерировать тест</button>
-                            </form>
-                        </td>
-                        <td id="test_link_<?= $testName ?>">
-                            <?php if (isset($_SESSION['selected_questions'][$testName])): ?>
-                                <a href="take_test.php?test=<?= urlencode($testName) ?>">Пройти тест</a>
-                            <?php else: ?>
-                                <span>Сгенерируйте тест</span>
-                            <?php endif; ?>
-                        </td>
-                        <td><a href="edit_test.php?test=<?= urlencode($testName) ?>">Редактировать</a></td>
-                    </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </tbody>
-    </table>
+<body Class="Body">
+    <div class="Block">
+        <div class="Sections">
+        <div Class = "Section">
+            <a href="index.php">Главная</a>
+        </div>
+        <div Class = "Section">
+            <a href="php/Profile.php">Профиль</a>
+        </div>
+        <div Class = "Section">
+            <a href="#Instruction">Инструкция</a>
+        </div>
+        <?php
+            if (isset($_SESSION['user'])) {
+            
+            echo '<div Class="Section"><a href="php/Unset.php">Выход</a></div>';
+            } else {
+         
+            echo '<div Class="Section"><a href="php/register.php">Регистрация</a></div>';
+            }
+        ?>
+        </div>
+        <div class="icons">
+        <div Class = "Home"></div>
+        <div Class = "ProfileIcon" href="php/Profile.php"></div>
+        <div Class = "Instructions" href="#Instruction"></div>
+        <?php
+            if (isset($_SESSION['user'])) {
+            echo '<div Class="LogOut" href="php/Unset.php"></div>';
+            } else {
+            echo '<div Class="LogIn"href="php/register.php"></div>';
+            }
+        ?>
+        </div>
+    </div>
+    <div class="Navigation">
+        <div class="blockfortext">
+            <p class="title">QUIZ MASTER</p>
+            <p class="Info">Проведение онлайн тестирования</p>            
+        </div>
+        <div class="PictureForNavigation"></div>
+    </div>
+    <div class ="AboutUs">
+        <div class="PictureForAboutUs">
+        </div>
+        <div class = "information">
+            <p class="t">QuizMaster</p>
+            <p class = "t2">- платформа, предоставляющая возможность проведения быстрого и эффективного тестирования студентов. С ее помощью вы легко создадите тесты и моментально загрузите их для использования.</p>
+            <p class ="t2"> Электронные тесты позволяют студентам моментально получить результаты и обратную связь</p>
+            <p class ="t2"> Экономия времени и улучшение учебного процесса</p>
+            <p class ="t2"> Никаких бумажных проблем или сложных процессов - все под контролем в виртуальном пространстве</p>
+            <p class = "t2">QuizMaster автоматически преобразует информацию из текстового файла в готовые тесты, обеспечивая быструю и удобную подготовку материалов для обучения.</p>
+        </div>
+    </div>
+  <div class="Instruction" id="Instruction">
+    </div>
 </body>
 </html>
+
